@@ -1,0 +1,238 @@
+---
+title: "Peakfinder (FTIR Spectra Analysis)"
+author: "JEG"
+date: "23.07.2019"
+output: html_document
+version: "01b"
+---
+
+```{r, include=FALSE}
+library(tidyverse)
+```
+
+```{r, include=FALSE}
+color_pal <- c("#999999", "#E69F00", "#56B4E9")
+```
+
+
+```{r, echo=FALSE}
+ftir <- read.table(file="DATA/spectrum.csv", 
+                   header=TRUE, 
+                   dec=",",
+                   sep=";", 
+                   stringsAsFactors = FALSE)
+
+ftir$replicate <- as.factor(ftir$replicate)
+ftir$treatment <- as.factor(ftir$treatment)
+
+```
+
+```{r}
+ftir <- ftir[ftir$wavenumber>=600,]
+```
+
+```{r}
+ftir <- ftir[ftir$treatment=="trt1" & ftir$replicate=="rep2",]
+```
+
+
+```{r, fig.width=16, fig.height=8, echo=FALSE}
+
+summary <- Rmisc::summarySE(ftir[ftir$absorbance!=0,], measurevar="absorbance", groupvars=c("wavenumber","treatment"))
+    
+FTIR_spectra <- ggplot(summary, aes(x=wavenumber, y=absorbance)) +
+  geom_line(size=.7, colour="red") +
+  theme_bw() + 
+  theme(legend.justification=c(0,1), 
+        legend.position=c(0.05, 0.95),
+        legend.background = element_blank(),
+        legend.box.background = element_rect(colour = "black"),
+        legend.key = element_blank(),
+        plot.margin = unit(c(.5,.5,.5,.5), "lines"),
+        axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.text.y = element_text(angle = 90, hjust = 1)
+        ) + 
+  labs(y="Absorbance", x = "Wavenumber") +
+  scale_x_reverse() + 
+  scale_y_continuous(sec.axis = sec_axis(~.*1,name = "Absorbance", breaks = seq(0, 0.35, 0.025))) +
+  coord_cartesian(ylim = c(0, 0.23), # This focuses the x-axis on the range of interest
+                  clip = 'off') +  # This keeps the labels from disappearing
+  scale_color_hue(c=70, l=60)
+
+FTIR_spectra
+
+```
+
+```{r,eval=FALSE}
+
+#LOESS SMOOTHING
+
+ftir.loess <- loess(absorbance~wavenumber, data=ftir, span=.025)
+ftir$absorbance_smoothed <-  NA
+ftir$absorbance_smoothed <- predict(ftir.loess, data.frame(wavenumber = ftir$wavenumber), se = TRUE)$fit
+```
+
+```{r}
+
+rolling_means_sensitivity <- 15
+
+#ROLLING MEANS SMOOTHING
+
+ftir <- ftir %>%
+  dplyr::mutate(
+    absorbance_smoothed = zoo::rollmean(absorbance, k = rolling_means_sensitivity, fill = NA)
+    )
+```
+
+
+```{r, eval=FALSE}
+ftir.spline <- smooth.spline(ftir$wavenumber,ftir$absorbance, cv=FALSE)
+ftir$absorbance_smoothed <- NA
+ftir$absorbance_smoothed <- predict(ftir.spline,newdata = list(wavenumber = ftir$wavenumber))$y
+
+```
+
+
+
+```{r,eval=FALSE}
+#spline.gam <- mgcv::gam(absorbance ~ s(wavenumber, bs = "cr"), data = ftir, method = "REML") # cubic spline
+spline.gam <- mgcv::gam(absorbance ~ s(wavenumber, bs="ad"), data=ftir)
+
+ftir$absorbance_smoothed <- NA
+ftir$absorbance_smoothed <- predict(spline.gam,newdata = list(wavenumber = ftir$wavenumber))
+```
+
+
+
+```{r, fig.width=16, fig.height=8, echo=FALSE}
+ggplot(ftir, aes(x=wavenumber)) +
+  geom_line(aes(y=absorbance), colour="red", size=.7) +
+  #geom_line(aes(y=absorbance_smoothed), colour="blue", size=.7) +
+  theme_bw()
+```
+
+
+
+```{r}
+#x <- sample(c(1:9), 10, replace = T)
+lag <- c(0, head(ftir$absorbance_smoothed, -1))
+ftir <- cbind(ftir, lag)
+```
+
+
+```{r}
+ftir$absorbance_smoothed_diff <- ftir$absorbance_smoothed - ftir$lag
+try(ftir[is.na(ftir$absorbance_smoothed_diff),]$absorbance_smoothed_diff <- 0)
+ftir$change <- NA
+ftir[ftir$absorbance_smoothed_diff<0,]$change  <- "smaller"
+ftir[ftir$absorbance_smoothed_diff>0,]$change  <- "bigger"
+```
+
+
+
+```{r}
+ftir_changes <- ftir[!is.na(ftir$change),]
+ftir_changes <- ftir_changes[which(diff(sign(ftir_changes$absorbance_smoothed_diff))!=0),]
+```
+
+
+```{r, fig.width=16, fig.height=8, echo=FALSE}
+
+ggplot(ftir, aes(x=wavenumber)) +
+  geom_line(aes(y=absorbance), colour="red", size=.7) +
+  #geom_line(aes(y=absorbance_smoothed), colour="blue", size=.7) +
+  geom_point(data=ftir_changes, aes(y=absorbance_smoothed)) +
+  #geom_point(size=.3) +
+  theme_bw()
+```
+
+```{r}
+ftir_valleys <- ftir_changes[which(diff(sign(ftir_changes$absorbance_smoothed_diff))>0),]
+ftir_valleys <- rbind(ftir_valleys, ftir[ftir$wavenumber==min(ftir$wavenumber, na.rm=TRUE),])
+ftir_valleys <- rbind(ftir_valleys, ftir[ftir$wavenumber==max(ftir$wavenumber, na.rm=TRUE),])
+```
+
+```{r, fig.width=16, fig.height=8, echo=FALSE}
+
+ggplot(ftir, aes(x=wavenumber)) +
+  geom_line(aes(y=absorbance), colour="red", size=.7) +
+  #geom_line(aes(y=absorbance_smoothed), colour="blue", size=.7) +
+  geom_point(data=ftir_valleys, aes(y=absorbance)) +
+  #geom_point(size=.3) +
+  theme_bw()
+```
+
+```{r}
+ftir_valleys <- dplyr::left_join(ftir[,c("treatment","wavenumber")], ftir_valleys[,c("treatment","wavenumber", "absorbance")], by=c("treatment","wavenumber"))
+
+ftir_valleys$absorbance_interp <- zoo::na.approx(ftir_valleys$absorbance, na.rm="FALSE")
+```
+
+
+```{r, fig.width=16, fig.height=8, echo=FALSE}
+
+ggplot(ftir, aes(x=wavenumber)) +
+  #geom_errorbar(aes(ymin=absorbance-sd, ymax=absorbance+sd), width=.1) + # we can change 'se' with 'sd' or 'ci'
+  geom_line(aes(y=absorbance), colour="red", size=.7) +
+  #geom_line(aes(y=absorbance_smoothed), colour="blue", size=.7) +
+  geom_line(data=ftir_valleys, aes(y=absorbance_interp)) +
+  #geom_point(size=.3) +
+  theme_bw()
+```
+
+
+```{r}
+ftir_peaks <- ftir_changes[which(diff(sign(ftir_changes$absorbance_smoothed_diff))<0),]
+```
+
+
+```{r}
+
+ftir_peaks$absorbance_smoothed_orig <- ftir_peaks$absorbance_smoothed
+
+for (i in (1:nrow(ftir_peaks))){
+  rownumber_i <- as.integer(rownames(ftir[ftir$absorbance==ftir_peaks[i,]$absorbance & ftir$wavenumber==ftir_peaks[i,]$wavenumber,]))
+  try(ftir_peaks[i,]$absorbance_smoothed <- max(
+    ftir[rownames(ftir)>(min(rownumber_i,na.rm=TRUE)-(rolling_means_sensitivity/2)) & rownames(ftir)<(max(rownumber_i,na.rm=TRUE)+(rolling_means_sensitivity/2)),]$absorbance, na.rm=TRUE
+  ), silent=TRUE)
+  if (ftir_peaks[i,]$absorbance_smoothed==-Inf){
+    ftir_peaks[i,]$absorbance_smoothed <- ftir_peaks[i,]$absorbance_smoothed_orig
+  }
+  if (ftir_peaks[i,]$absorbance_smoothed==Inf){
+    ftir_peaks[i,]$absorbance_smoothed <- ftir_peaks[i,]$absorbance_smoothed_orig
+  }
+  if (is.na(ftir_peaks[i,]$absorbance_smoothed)){
+    ftir_peaks[i,]$absorbance_smoothed <- ftir_peaks[i,]$absorbance_smoothed_orig
+  }
+}
+
+#ftir_peaks
+```
+
+###Plotting the peaks  
+```{r, fig.width=16, fig.height=8, echo=FALSE}
+
+ggplot(ftir, aes(x=wavenumber)) +
+  geom_line(aes(y=absorbance), colour="red", size=.7) +
+  geom_point(data=ftir_peaks, aes(y=absorbance)) +
+  theme_bw()
+```
+
+
+###Calculating the peak height  
+```{r}
+ftir_peaks <- dplyr::left_join(ftir_peaks[,c("treatment","wavenumber", "absorbance", "absorbance_smoothed")], ftir_valleys[,c("treatment","wavenumber", "absorbance_interp")], by=c("treatment","wavenumber"))
+ftir_peaks$height <- NA
+ftir_peaks$height <- ftir_peaks$absorbance_smoothed - ftir_peaks$absorbance_interp
+```
+
+```{r, fig.width=16, fig.height=8, echo=FALSE}
+
+ggplot(ftir, aes(x=wavenumber)) +
+  #scale_x_reverse() + 
+  geom_line(aes(y=absorbance), colour="red", size=.7) +
+  geom_line(data=ftir_valleys, aes(y=absorbance_interp)) +
+  theme_light() +
+  annotate("text", x=ftir_peaks$wavenumber, y=ftir_peaks$absorbance,
+           label=round(ftir_peaks$height,3),check_overlap = TRUE)
+```
