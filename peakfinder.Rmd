@@ -7,10 +7,8 @@ version: "01b"
 ---
 
 ```{r, include=FALSE}
-library(tidyverse)
+library(ggplot2)
 ```
-
-
 
 
 ```{r, echo=FALSE}
@@ -64,10 +62,8 @@ rolling_means_sensitivity <- 15
 
 #ROLLING MEANS SMOOTHING
 
-ftir <- ftir %>%
-  dplyr::mutate(
-    absorbance_smoothed = zoo::rollmean(absorbance, k = rolling_means_sensitivity, fill = NA)
-    )
+ftir$absorbance_smoothed = zoo::rollmean(ftir$absorbance, k = rolling_means_sensitivity, fill = NA)
+
 ```
 
 
@@ -93,8 +89,10 @@ ftir$absorbance_smoothed <- predict(spline.gam,newdata = list(wavenumber = ftir$
 ```{r, fig.width=16, fig.height=8, echo=FALSE}
 ggplot(ftir, aes(x=wavenumber)) +
   geom_line(aes(y=absorbance), colour="red", size=.7) +
-  #geom_line(aes(y=absorbance_smoothed), colour="blue", size=.7) +
-  theme_bw()
+  geom_line(aes(y=absorbance_smoothed), colour="blue", size=.7) +
+  theme_bw() +
+  scale_x_reverse()
+  
 ```
 
 
@@ -125,11 +123,11 @@ ftir_changes <- ftir_changes[which(diff(sign(ftir_changes$absorbance_smoothed_di
 ```{r, fig.width=16, fig.height=8, echo=FALSE}
 
 ggplot(ftir, aes(x=wavenumber)) +
-  geom_line(aes(y=absorbance), colour="red", size=.7) +
-  #geom_line(aes(y=absorbance_smoothed), colour="blue", size=.7) +
+  #geom_line(aes(y=absorbance), colour="red", size=.7) +
+  geom_line(aes(y=absorbance_smoothed), colour="blue", size=.7) +
   geom_point(data=ftir_changes, aes(y=absorbance_smoothed)) +
-  #geom_point(size=.3) +
-  theme_bw()
+  theme_bw() +
+  scale_x_reverse()
 ```
 
 ```{r}
@@ -141,11 +139,11 @@ ftir_valleys <- rbind(ftir_valleys, ftir[ftir$wavenumber==max(ftir$wavenumber, n
 ```{r, fig.width=16, fig.height=8, echo=FALSE}
 
 ggplot(ftir, aes(x=wavenumber)) +
-  geom_line(aes(y=absorbance), colour="red", size=.7) +
-  #geom_line(aes(y=absorbance_smoothed), colour="blue", size=.7) +
+  #geom_line(aes(y=absorbance), colour="red", size=.7) +
+  geom_line(aes(y=absorbance_smoothed), colour="blue", size=.7) +
   geom_point(data=ftir_valleys, aes(y=absorbance)) +
-  #geom_point(size=.3) +
-  theme_bw()
+  theme_bw() +
+  scale_x_reverse()
 ```
 
 ```{r}
@@ -158,12 +156,11 @@ ftir_valleys$absorbance_interp <- zoo::na.approx(ftir_valleys$absorbance, na.rm=
 ```{r, fig.width=16, fig.height=8, echo=FALSE}
 
 ggplot(ftir, aes(x=wavenumber)) +
-  #geom_errorbar(aes(ymin=absorbance-sd, ymax=absorbance+sd), width=.1) + # we can change 'se' with 'sd' or 'ci'
-  geom_line(aes(y=absorbance), colour="red", size=.7) +
-  #geom_line(aes(y=absorbance_smoothed), colour="blue", size=.7) +
+  #geom_line(aes(y=absorbance), colour="red", size=.7) +
+  geom_line(aes(y=absorbance_smoothed), colour="blue", size=.7) +
   geom_line(data=ftir_valleys, aes(y=absorbance_interp)) +
-  #geom_point(size=.3) +
-  theme_bw()
+  theme_bw() +
+  scale_x_reverse()
 ```
 
 
@@ -199,9 +196,11 @@ for (i in (1:nrow(ftir_peaks))){
 ```{r, fig.width=16, fig.height=8, echo=FALSE}
 
 ggplot(ftir, aes(x=wavenumber)) +
-  geom_line(aes(y=absorbance), colour="red", size=.7) +
+  #geom_line(aes(y=absorbance), colour="red", size=.7) +
+  geom_line(aes(y=absorbance_smoothed), colour="blue", size=.7) +
   geom_point(data=ftir_peaks, aes(y=absorbance)) +
-  theme_bw()
+  theme_bw() +
+  scale_x_reverse()
 ```
 
 
@@ -215,10 +214,11 @@ ftir_peaks$height <- ftir_peaks$absorbance_smoothed - ftir_peaks$absorbance_inte
 ```{r, fig.width=16, fig.height=8, echo=FALSE}
 
 ggplot(ftir, aes(x=wavenumber)) +
-  #scale_x_reverse() + 
-  geom_line(aes(y=absorbance), colour="red", size=.7) +
+  #geom_line(aes(y=absorbance), colour="red", size=.7) +
+  geom_line(aes(y=absorbance_smoothed), colour="blue", size=.7) +
   geom_line(data=ftir_valleys, aes(y=absorbance_interp)) +
-  theme_light() +
+  theme_bw() +
+  scale_x_reverse() +
   annotate("text", x=ftir_peaks$wavenumber, y=ftir_peaks$absorbance,
            label=round(ftir_peaks$height,3),check_overlap = TRUE)
 ```
