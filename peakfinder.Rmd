@@ -16,19 +16,24 @@ color_pal <- c("#999999", "#E69F00", "#56B4E9")
 
 
 ```{r, echo=FALSE}
-ftir <- read.table(file="DATA/spectrum.csv", 
+ftir <- read.table(file="https://raw.githubusercontent.com/paracon/peakfinder/master/DATA/spectra.csv", 
                    header=TRUE, 
-                   dec=",",
-                   sep=";", 
+                   dec=".",
+                   sep=",", 
                    stringsAsFactors = FALSE)
 
 ftir$replicate <- as.factor(ftir$replicate)
 ftir$treatment <- as.factor(ftir$treatment)
+ftir$wavenumber <- as.numeric(ftir$wavenumber)
+
+ftir <- ftir[!is.na(ftir$wavenumber),]
+
+ftir <- ftir[ftir$absorbance>0,]
 
 ```
 
 ```{r}
-ftir <- ftir[ftir$wavenumber>=600,]
+ftir <- ftir[ftir$wavenumber>=600 & ftir$wavenumber<=4000,]
 ```
 
 ```{r}
